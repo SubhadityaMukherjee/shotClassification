@@ -4,10 +4,42 @@ import pytorch_lightning as pl
 import torch
 from albumentations.pytorch import ToTensorV2
 from pytorch_lightning.metrics.functional import accuracy
+from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from data import *
+
+
+def lin_comb(v1, v2, beta):
+    """
+    Linear Combination
+    """
+    return beta * v1 + (1 - beta) * v2
+
+
+def reduce_loss(loss, reduction="mean"):
+    return (
+        loss.mean()
+        if reduction == "mean"
+        else loss.sum()
+        if reduction == "sum"
+        else loss
+    )
+
+
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, ε: float = 0.1, reduction="mean"):
+        super().__init__()
+        self.ε, self.reduction = ε, reduction
+
+    def forward(self, output, target):
+        target = target.to(torch.long)
+        c = output.size()[-1]
+        log_preds = F.log_softmax(output, dim=-1)
+        loss = reduce_loss(-log_preds.sum(dim=-1), self.reduction)
+        nll = F.nll_loss(log_preds, target, reduction=self.reduction)
+        return {"loss": lin_comb(loss / c, nll, self.ε)}
 
 
 class LitModel(pl.LightningModule):
@@ -35,7 +67,7 @@ class LitModel(pl.LightningModule):
 
     def forward(self, x):
         out = self.model(x)
-        return F.softmax(out, dim=1)
+        return out
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
@@ -49,7 +81,9 @@ class LitModel(pl.LightningModule):
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch["x"], train_batch["y"]
         preds = self(x)
-        loss = F.cross_entropy(preds, y)
+        #  loss = F.binary_cross_entropy_with_logits(preds, y)
+        loss = F.nll_loss(preds, y)
+        #  loss = LabelSmoothingCrossEntropy(preds, y)
         acc = accuracy(preds, y)
         self.log("train_acc_step", acc)
         self.log("train_loss", loss)
@@ -58,15 +92,18 @@ class LitModel(pl.LightningModule):
     def test_step(self, test_batch, batch_idx):
         x, y = test_batch["x"], test_batch["y"]
         preds = self(x)
-        loss = F.cross_entropy(preds, y)
+
+        loss = F.nll_loss(preds, y)
+        #  loss = LabelSmoothingCrossEntropy(preds, y)
         acc = accuracy(preds, y)
-        self.log("val_acc_step", acc)
-        self.log("val_loss", loss)
+        self.log("test_acc_step", acc)
+        self.log("test_loss", loss)
 
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch["x"], val_batch["y"]
         preds = self(x)
-        loss = F.cross_entropy(preds, y)
+        loss = F.nll_loss(preds, y)
+        #  loss = LabelSmoothingCrossEntropy(preds, y)
         acc = accuracy(preds, y)
         self.log("val_acc_step", acc)
         self.log("val_loss", loss)
@@ -87,32 +124,33 @@ class ImDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.train_transform = A.Compose(
             [
-                A.RandomResizedCrop(img_size, img_size, p=1.0),
-                A.Transpose(p=0.5),
-                A.HorizontalFlip(p=0.5),
-                A.VerticalFlip(p=0.5),
-                A.ShiftScaleRotate(p=0.5),
-                A.HueSaturationValue(
-                    hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5
-                ),
-                A.RandomBrightnessContrast(
-                    brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5
-                ),
+                #  A.RandomResizedCrop(img_size, img_size, p=1.0),
+                A.Resize(img_size, img_size),
+                #  A.Transpose(p=0.5),
+                #  A.HorizontalFlip(p=0.5),
+                #  A.VerticalFlip(p=0.5),
+                #  A.ShiftScaleRotate(p=0.5),
+                #  A.HueSaturationValue(
+                #      hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5
+                #  ),
+                #  A.RandomBrightnessContrast(
+                #      brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5
+                #  ),
                 A.Normalize(
                     mean=[0.485, 0.456, 0.406],
                     std=[0.229, 0.224, 0.225],
                     max_pixel_value=255.0,
                     p=1.0,
                 ),
-                A.CoarseDropout(p=0.5),
-                A.Cutout(p=0.5),
+                #  A.CoarseDropout(p=0.5),
+                #  A.Cutout(p=0.5),
                 ToTensorV2(p=1.0),
             ],
             p=1.0,
         )
         self.valid_transform = A.Compose(
             [
-                A.CenterCrop(img_size, img_size, p=1.0),
+                #  A.CenterCrop(img_size, img_size, p=1.0),
                 A.Resize(img_size, img_size),
                 A.Normalize(
                     mean=[0.485, 0.456, 0.406],

@@ -16,31 +16,45 @@ os.environ["TORCH_HOME"] = "/media/hdd/Datasets/"
 lg = outLogger()
 
 main_path = "/media/hdd/Datasets/shotclassification/trailer/"
-batch_size = 128
+batch_size = 512
 num_classes = 5
 img_size = 128
-n_epochs = 1
-max_preprocessed = 1000
+n_epochs = 5
+max_preprocessed = 5000
 
 # Define network
-enet = EfficientNet.from_pretrained(
-            "efficientnet-b3", num_classes=num_classes
-        )
-in_features = enet._fc.in_features
-enet._fc = nn.Linear(in_features, num_classes)
+# enet = EfficientNet.from_pretrained(
+#             "efficientnet-b3", num_classes=num_classes
+#         )
+# enet = EfficientNet.from_name("efficientnet-b3")
+# in_features = enet._fc.in_features
+# enet._fc = nn.Sequential(
+#     nn.Linear(in_features, num_classes),
+#     nn.Softmax(dim = 1))
+
+
+enet = xresnet34(c_out= num_classes)
+in_features = enet[10].in_features
+enet[10] = nn.Sequential(
+    nn.Linear(in_features, num_classes),
+    nn.Softmax(dim = 1))
+
 
 # PREPROCESS
 lg("start preprocessing")
-#  preprocess_data(main_path,max_preprocessed)
+# preprocess_data(Path("/media/hdd/Datasets/shotclassification/"),max_preprocessed)
 lg("end preprocessing")
 
 # CHOOSE WHERE THE FILES ARE
 all_ims = glob.glob(main_path + "/*/*.jpg")
-lg(f"Len all : f{len(all_ims)}")
+lg(f"Len all : {len(all_ims)}")
 
 # CONVERT TO DATAFRAME FOR STRATIFY
 df, label_map = create_from_dict(all_ims, create_label=create_label)
 lg("Created dataframe")
+
+# subset
+df= df.loc[:1000]
 
 # +
 # LOAD
@@ -56,23 +70,10 @@ dm = ImDataModule(
 class_ids = dm.setup()
 # -
 
-dm.train_dataloader()
-
 # PASS MODEL
 model = LitModel(num_classes,model = enet, learning_rate=1e-4)
 
 count_parameters(model.model, show_table=False)
-
-
-def visualize_model(model, inp_size=[1, 3, 64, 64], device="cuda:0"):
-    model = model.to(device)
-    model.eval()
-    """
-    Use hiddenlayer to visualize a model
-    """
-    return hl.build_graph(model, torch.zeros(inp_size).to(device))
-
-
 
 visualize_model(model)
 
@@ -86,9 +87,9 @@ visualize_model(model)
 total_layer_state(model)
 
 # RUN TRAINING
-logger = CSVLogger("logs", name="eff-5")
+logger = CSVLogger("logs", name="xres34-no-aug")
 trained = run_training(n_epochs, model, dm, logger=logger)
 
-# !cat "logs/eff-5/version_18/metrics.csv"
+get_last_log("xres34-no-aug")
 
 

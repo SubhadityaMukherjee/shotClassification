@@ -1,4 +1,5 @@
 import pytorch_lightning as pl
+from pl_bolts.callbacks import PrintTableMetricsCallback
 from pytorch_lightning.loggers import *
 
 
@@ -9,9 +10,12 @@ def run_training(n_epochs, model, dm, logger=CSVLogger("logs")):
         precision=16,
         profiler=False,
         max_epochs=n_epochs,
-        callbacks=[pl.callbacks.ProgressBar()],
+        callbacks=[
+            pl.callbacks.ProgressBar(),
+            pl.callbacks.GPUStatsMonitor(),
+            PrintTableMetricsCallback(),
+        ],
         logger=logger,
-        auto_scale_batch_size=True,
         #  accelerator="ddp",
         #  plugins="ddp_sharded",
     )

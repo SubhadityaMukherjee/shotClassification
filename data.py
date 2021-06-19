@@ -79,7 +79,7 @@ def preprocess_data(fpath, max_l=1000):
     list_to_run = [(x[1], x[2]) for x in key_df.itertuples()]
 
     for i in tqdm(list_to_run[:max_l], total=max_l):
-        run_splitter(i)
+        conv_to_frames(i[0], fpath, i[1])
 
 
 def create_from_dict(all_ims, create_label):
