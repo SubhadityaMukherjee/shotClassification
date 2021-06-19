@@ -11,9 +11,11 @@ def run_training(n_epochs, model, dm, logger=CSVLogger("logs")):
         max_epochs=n_epochs,
         callbacks=[pl.callbacks.ProgressBar()],
         logger=logger,
-        accelerator="ddp",
-        plugins="ddp_sharded",
+        auto_scale_batch_size=True,
+        #  accelerator="ddp",
+        #  plugins="ddp_sharded",
     )
 
     trainer.fit(model, dm)
-    trainer.save_checkpoint("model1.ckpt")
+    trainer.save_checkpoint("./logs/model1.ckpt")
+    return trainer

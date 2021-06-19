@@ -1,8 +1,13 @@
 # Shot classification
 
 - Dataset from [link](https://anyirao.com/projects/ShotType.html)
-- Framework used [sprintdl](https://github.com/SubhadityaMukherjee/sprintdl)
-        - A note: Yes I am using a custom library. But everything I do will be properly documented so you can directly translate it to your own. (Eg: architecture, procedures etc)
+- Using Pytorch lightning
+
+# Steps to run
+- Do a pip install -r requirements.txt
+- lightningaddons is a package I am working on. (Will be up on pip shortly) [repo](https://github.com/SubhadityaMukherjee/shotClassification)
+- Just have a look at main.ipynb or main.html
+
 # Classes (5)
         - Extreme Close up
         - Close up shot

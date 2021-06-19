@@ -8,10 +8,6 @@ from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from helpers import *
-
-lg = outLogger()
-
 
 def create_label(x):
     return str(Path(Path(x).name.split("_")[-1]).stem)
@@ -82,7 +78,6 @@ def preprocess_data(fpath, max_l=1000):
     key_df.to_csv(fpath / "labels.csv")
     list_to_run = [(x[1], x[2]) for x in key_df.itertuples()]
 
-    lg("Running video -> image splitter")
     for i in tqdm(list_to_run[:max_l], total=max_l):
         run_splitter(i)
 
@@ -97,7 +92,6 @@ def create_from_dict(all_ims, create_label):
 
     print(df.head())
 
-    lg("mapping output")
     temp = preprocessing.LabelEncoder()
     df["label"] = temp.fit_transform(df.label.values)
 
@@ -108,7 +102,6 @@ def create_from_dict(all_ims, create_label):
     df.label.value_counts()
 
     df["kfold"] = -1
-    lg("running K fold")
     df = df.sample(frac=1).reset_index(drop=True)
     stratify = StratifiedKFold(n_splits=5)
     for i, (t_idx, v_idx) in enumerate(
@@ -116,6 +109,5 @@ def create_from_dict(all_ims, create_label):
     ):
         df.loc[v_idx, "kfold"] = i
         df.to_csv("train_folds.csv", index=False)
-    lg("saved folded dataset")
 
     return df, label_map

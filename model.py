@@ -2,19 +2,23 @@ import albumentations as A
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from albumentations.pytorch import ToTensorV2
 from pytorch_lightning.metrics.functional import accuracy
-from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from data import *
-from helpers import *
 
-lg = outLogger()
 
-from efficientnet_pytorch import EfficientNet
 class LitModel(pl.LightningModule):
-    def __init__(self, num_classes,model, learning_rate=1e-4, weight_decay=0.0001):
+    def __init__(
+        self,
+        num_classes,
+        model,
+        batch_size=128,
+        learning_rate=1e-4,
+        weight_decay=0.0001,
+    ):
         super().__init__()
 
         # log hyperparameters
@@ -23,9 +27,10 @@ class LitModel(pl.LightningModule):
 
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.batch_size = batch_size
 
         self.model = model
-        
+
     #     @sn.snoop()
 
     def forward(self, x):
@@ -50,6 +55,14 @@ class LitModel(pl.LightningModule):
         self.log("train_loss", loss)
         return loss
 
+    def test_step(self, test_batch, batch_idx):
+        x, y = test_batch["x"], test_batch["y"]
+        preds = self(x)
+        loss = F.cross_entropy(preds, y)
+        acc = accuracy(preds, y)
+        self.log("val_acc_step", acc)
+        self.log("val_loss", loss)
+
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch["x"], val_batch["y"]
         preds = self(x)
@@ -66,8 +79,6 @@ class ImDataModule(pl.LightningDataModule):
         batch_size,
         num_classes,
         data_dir,
-        train_transforms, 
-        valid_transforms,
         img_size=(256, 256),
     ):
         super().__init__()
@@ -75,11 +86,42 @@ class ImDataModule(pl.LightningDataModule):
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.train_transform = A.Compose(
-            train_transforms,
+            [
+                A.RandomResizedCrop(img_size, img_size, p=1.0),
+                A.Transpose(p=0.5),
+                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.5),
+                A.ShiftScaleRotate(p=0.5),
+                A.HueSaturationValue(
+                    hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5
+                ),
+                A.RandomBrightnessContrast(
+                    brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5
+                ),
+                A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0,
+                    p=1.0,
+                ),
+                A.CoarseDropout(p=0.5),
+                A.Cutout(p=0.5),
+                ToTensorV2(p=1.0),
+            ],
             p=1.0,
         )
         self.valid_transform = A.Compose(
-            valid_transforms,
+            [
+                A.CenterCrop(img_size, img_size, p=1.0),
+                A.Resize(img_size, img_size),
+                A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0,
+                    p=1.0,
+                ),
+                ToTensorV2(p=1.0),
+            ],
             p=1.0,
         )
 
@@ -95,7 +137,6 @@ class ImDataModule(pl.LightningDataModule):
         self.valid_dataset = ImageClassDs(
             val, self.data_dir, train=False, transforms=self.valid_transform
         )
-        lg("Finished setup")
 
     def train_dataloader(self):
         return DataLoader(
